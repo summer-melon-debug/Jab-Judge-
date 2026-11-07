@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BoxingSync</title>
+<link rel="stylesheet" href="/assets/style.css">
+<script src="/assets/app.js" defer></script>
+</head>
+<body>
+<main>
+  <header class="mast"><div class="brand"><span class="mark" aria-hidden="true">↳</span> BoxingSync</div><span class="tag">LOCAL WORKSPACE</span></header>
+  <div class="intro"><p class="eyebrow">VIDEO + SENSOR ANALYSIS</p><h1>Analyze a boxing session</h1>
+  <p>Sync glove and helmet triggers with the video. See each action in the annotated export.</p></div>
+  <section class="panel" aria-labelledby="upload-heading">
+    <div class="section-head"><div><span class="step">01</span><h2 id="upload-heading">Add files</h2></div><button id="sample" class="quiet" type="button">Try sample</button></div>
+    <form id="upload">
+      <div class="fields">
+        <label class="file"><span>Session video</span><small>MP4 or MOV · up to 3 min</small><input id="video-file" name="video" type="file" accept=".mp4,.mov,.m4v,.webm,.mkv,.avi" required></label>
+        <label class="file"><span>Sensor signals</span><small>One combined CSV or two sensor CSVs</small><input name="signals" type="file" accept=".csv,text/csv" multiple required></label>
+      </div>
+      <button class="primary" id="upload-button">Upload and analyze</button>
+    </form>
+    <p id="upload-status" class="status" role="status" hidden></p>
+  </section>
+
+  <section id="setup" class="panel" hidden aria-labelledby="setup-heading">
+    <div class="section-head"><div><span class="step">02</span><h2 id="setup-heading">Analysis</h2></div></div>
+    <details class="optional" id="advanced">
+    <summary>Advanced setup</summary>
+    <div id="calibration" hidden>
+      <p class="help">Mark the space each object moves through, then draw tight examples of the glove and helmet. Add examples from different poses if the view changes.</p>
+      <div class="cal-grid">
+        <div>
+          <div class="video-wrap"><video id="preview" controls playsinline preload="auto"></video><canvas id="boxes" width="960" height="540"></canvas></div>
+          <div class="tools frame-tools"><button id="previous" type="button" aria-label="Previous frame">−1 frame</button><button id="next" type="button">+1 frame</button><span id="frame-time"></span></div>
+        </div>
+        <div class="cal-tools">
+          <button type="button" data-box="glove_search">Glove search area</button>
+          <button type="button" data-box="helmet_search">Helmet search area</button>
+          <button type="button" data-box="glove_templates">Add glove example</button>
+          <button type="button" data-box="helmet_templates">Add helmet example</button>
+          <p id="boxes-summary" class="help" role="status"></p>
+          <button id="undo" type="button" class="quiet">Undo last box</button>
+          <label class="stack">Punch direction<select id="direction"><option value="1">Left to right</option><option value="-1">Right to left</option></select></label>
+        </div>
+      </div>
+    </div>
+    <details class="optional">
+      <summary>Manual sync anchors</summary>
+      <p class="help">Enter a video time and the matching sensor time in seconds, separated by a comma. Use one pair per line.</p>
+      <label class="stack">Video seconds, sensor seconds<textarea id="anchors" rows="3" placeholder="1.467, 2.902"></textarea></label>
+    </details>
+    <button id="analyze" type="button" class="primary" disabled>Run analysis again</button>
+    </details>
+    <p id="analysis-status" class="status" role="status" hidden></p>
+  </section>
+
+  <section id="results" class="panel" hidden aria-labelledby="results-heading">
+    <div class="section-head"><div><span class="step">03</span><h2 id="results-heading">Results</h2></div>
+      <a id="download-video" class="primary button" download="annotated.mp4">Download video</a>
+    </div>
+    <div id="counts" class="counts"></div>
+    <video id="result-video" class="result-video" controls playsinline preload="metadata"></video>
+    <p id="audio-status" class="help audio-result" role="status" hidden></p>
+    <div class="timeline-head"><div><h3>Signal timeline</h3><p class="help">Click the timeline or an event to seek the video.</p></div>
+      <div class="tools"><select id="axis" aria-label="Timeline timebase"><option value="video_s">Video time</option><option value="sensor_s">Sensor time</option></select>
+        <button id="zoom-in" type="button" aria-label="Zoom in">+</button><button id="zoom-out" type="button" aria-label="Zoom out">−</button><button id="reset" type="button">Fit</button>
+        <button id="left" type="button" aria-label="Pan left">←</button><button id="right" type="button" aria-label="Pan right">→</button>
+      </div>
+    </div>
+    <canvas id="timeline" aria-label="Event markers and sensor trigger voltage peaks"></canvas>
+    <p id="marker-detail" class="help" aria-live="polite"></p>
+    <p id="sync-detail" class="help"></p>
+    <div class="timeline-head"><h3>Events</h3><div class="tools">
+      <select id="filter" aria-label="Filter events"><option value="">All actions</option></select>
+      <a id="events-csv" class="button" download="events.csv">Events CSV</a>
+      <a id="signals-csv" class="button" download="aligned_signals.csv">Signals CSV</a>
+    </div></div>
+    <div class="table-wrap"><table><thead><tr><th scope="col">Video</th><th scope="col">Action</th><th scope="col">Sensor</th><th scope="col">Position</th></tr></thead><tbody id="events"></tbody></table></div>
+  </section>
+</main>
+</body>
+</html>
