@@ -1,0 +1,11 @@
+pyserial
+numpy
+matplotlib
+pygame
+python-dotenv
+anthropic
+sounddevice
+SpeechRecognition
+fastapi
+uvicorn[standard]
+pywin32; sys_platform == "win32"

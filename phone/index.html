@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1B3C8C">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Jab Judge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Ring canvas blue, white ropes, red corner. Hits are red because a hit is a point for the red corner. */
+:root{
+  --canvas:#1B3C8C;     /* ring canvas */
+  --apron:#132C6A;      /* darker canvas under the ropes */
+  --rope:#F4F6FA;       /* ropes, primary text */
+  --chalk:#A9B8DD;      /* secondary text */
+  --corner:#E0313B;     /* red corner: hits, talk button */
+  --steel:#C7D0E4;      /* blocked */
+  --motion:#FFC857;     /* arm motion (accelerometer) */
+  --display:'Big Shoulders Display',Impact,'Arial Narrow',sans-serif;
+  --body:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0}
+body{background:var(--canvas);color:var(--rope);font:400 15px/1.45 var(--body);overflow-x:hidden}
+/* the app fills the screen; if the screen is too short for everything, it grows and the page scrolls */
+.app{
+  min-height:100vh;min-height:100dvh;background:var(--canvas);
+  display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--rope);outline-offset:2px}
+
+/* ---------- header ---------- */
+.top{display:flex;align-items:center;gap:10px;padding:12px 16px 10px;flex:0 0 auto}
+.name{font:900 24px/1 var(--display);letter-spacing:.01em}
+.live{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--chalk)}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--chalk);opacity:.5}
+.live.on{color:var(--rope)}
+.live.on i{background:#4BD37B;opacity:1}
+.camtoggle{margin-left:auto;background:none;border:1px solid var(--chalk);border-radius:999px;
+  padding:5px 14px;font-size:13px;color:var(--rope)}
+.camtoggle[aria-pressed="true"]{background:var(--rope);color:var(--canvas);border-color:var(--rope)}
+.setup{background:none;border:1px solid var(--chalk);border-radius:999px;
+  padding:5px 14px;font-size:13px;color:var(--rope)}
+
+/* three ropes, the only divider on the page */
+.ropes{flex:0 0 auto;height:11px;margin:0 16px;
+  background:linear-gradient(var(--rope),var(--rope)) 0 0/100% 1px no-repeat,
+             linear-gradient(var(--rope),var(--rope)) 0 5px/100% 1px no-repeat,
+             linear-gradient(var(--rope),var(--rope)) 0 10px/100% 1px no-repeat;opacity:.35}
+
+/* ---------- setup ---------- */
+.panel{display:none;padding:14px 16px;background:var(--apron);flex:0 0 auto}
+.panel.open{display:block}
+.panel label.field{display:block;font-size:13px;color:var(--chalk);margin-bottom:6px}
+.panel input[type=text]{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #3B5AA8;
+  background:var(--canvas);font-size:14px}
+.buttons{display:flex;gap:8px;margin-top:10px}
+.buttons button{flex:1;padding:10px;border-radius:8px;border:1px solid #3B5AA8;background:none;font-weight:600}
+.buttons .go{background:var(--rope);color:var(--canvas);border-color:var(--rope)}
+.checks{display:flex;flex-direction:column;gap:8px;margin-top:12px;font-size:14px}
+.checks label{display:flex;align-items:center;gap:8px}
+.checks input{width:18px;height:18px;accent-color:var(--corner)}
+
+/* ---------- verdict: the one loud thing ---------- */
+.verdict{flex:0 0 auto;margin:12px 16px 0;height:76px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--apron);color:var(--chalk);
+  font:900 22px/1 var(--display);letter-spacing:.02em;overflow:hidden;
+  transition:background .25s ease,color .25s ease}
+.verdict.call{font-size:62px}
+.verdict.hit{background:var(--corner);color:#fff}
+.verdict.blocked{background:var(--steel);color:var(--canvas)}
+.verdict.miss{background:transparent;color:var(--rope);box-shadow:inset 0 0 0 2px var(--rope)}
+.verdict.slam span{display:inline-block;animation:slam .22s cubic-bezier(.2,1.6,.4,1)}
+@keyframes slam{from{transform:scale(1.5);opacity:.2}to{transform:none;opacity:1}}
+
+/* ---------- camera ---------- */
+.cam{flex:0 0 auto;margin:12px 16px 0}
+.cam[hidden]{display:none}
+#camc{display:block;width:100%;border-radius:10px;background:#0E2050;aspect-ratio:16/9}
+.camrow{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+.camrow button{padding:9px 14px;border-radius:999px;border:1px solid var(--chalk);background:none;font-size:14px}
+.camrow .rec{background:var(--corner);border-color:var(--corner);color:#fff;font-weight:600}
+.camrow .rec.on{background:var(--rope);border-color:var(--rope);color:var(--corner)}
+.camrow span{font-size:13px;color:var(--chalk)}
+
+/* ---------- tally ---------- */
+.tally{flex:0 0 auto;position:relative;display:grid;grid-template-columns:1fr auto;align-items:end;
+  gap:4px 16px;padding:8px 16px 4px}
+.hits{position:relative;font:900 clamp(104px,36vw,176px)/.8 var(--display);
+  font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.hits small{display:block;font:500 14px/1 var(--body);color:var(--chalk);margin-bottom:10px;letter-spacing:0}
+.rate{position:relative;text-align:right;padding-bottom:6px}
+.rate b{display:block;font:700 44px/1 var(--display);font-variant-numeric:tabular-nums}
+.rate span{font-size:13px;color:var(--chalk)}
+.minor{position:relative;grid-column:1/-1;display:flex;gap:22px;padding-top:12px;font-size:14px;color:var(--chalk)}
+.minor b{font:700 22px/1 var(--display);color:var(--rope);margin-right:5px;font-variant-numeric:tabular-nums}
+
+/* ---------- live signals: one lane per sensor ---------- */
+.signals{flex:0 0 auto;position:relative;margin:10px 16px 2px;height:132px;border-radius:10px;background:var(--apron)}
+#wave{position:absolute;inset:0;width:100%;height:100%}
+.lanes{position:absolute;inset:0;display:grid;grid-template-rows:repeat(3,1fr);pointer-events:none}
+.lanes span{padding:5px 9px;font-size:12px;color:var(--chalk)}
+.lanes span i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;vertical-align:0}
+
+/* ---------- conversation ---------- */
+.log{flex:1 1 0;min-height:96px;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:10px;
+  -webkit-overflow-scrolling:touch}
+.msg.sys:first-child{margin-top:auto}
+/* slim scrollbars that match the canvas instead of the grey system ones */
+html,.log{scrollbar-width:thin;scrollbar-color:#3B5AA8 transparent}
+html::-webkit-scrollbar,.log::-webkit-scrollbar{width:6px}
+html::-webkit-scrollbar-thumb,.log::-webkit-scrollbar-thumb{background:#3B5AA8;border-radius:3px}
+html::-webkit-scrollbar-track,.log::-webkit-scrollbar-track{background:transparent}
+.msg{max-width:84%;padding:10px 13px;border-radius:14px;font-size:15px}
+.msg.coach{align-self:flex-start;background:var(--rope);color:var(--canvas);border-bottom-left-radius:4px}
+.msg.you{align-self:flex-end;background:var(--apron);border-bottom-right-radius:4px}
+.msg.sys{align-self:center;max-width:none;padding:2px;font-size:13px;color:var(--chalk);text-align:center}
+
+/* ---------- ask the coach ---------- */
+.ask{flex:0 0 auto;padding:10px 16px 14px;background:var(--apron)}
+.mic{width:100%;padding:17px;border:none;border-radius:14px;background:var(--corner);color:#fff;
+  font:900 22px/1 var(--display);letter-spacing:.02em;touch-action:none;transition:transform .08s;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.mic.rec{background:var(--rope);color:var(--corner);transform:scale(.985)}
+.mic:disabled{background:#2C4A96;color:var(--chalk)}
+.type{display:flex;gap:8px;margin-top:8px}
+.type input{flex:1;min-width:0;padding:10px 12px;border-radius:10px;border:1px solid #3B5AA8;background:var(--canvas);font-size:15px}
+.type input::placeholder{color:var(--chalk)}
+.type button{padding:0 18px;border-radius:10px;border:none;background:var(--rope);color:var(--canvas);font-weight:600}
+
+/* wide screens (laptop, projector): keep the phone layout, centered, with the apron around it */
+@media (min-width:560px){
+  body{background:var(--apron)}
+  .app{max-width:480px;margin:0 auto;box-shadow:0 0 0 1px #2C4A96,0 20px 60px rgba(5,15,40,.45)}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .verdict,.mic{transition:none}
+  .verdict.slam span{animation:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<header class="top">
+  <div class="name">Jab Judge</div>
+  <div class="live" id="live"><i></i><span id="stat">Offline</span></div>
+  <button class="camtoggle" id="camBtn" aria-pressed="false">Camera</button>
+  <button class="setup" id="gear" aria-expanded="false" aria-controls="panel">Setup</button>
+</header>
+
+<div class="panel" id="panel">
+  <label class="field" for="url">Bridge address</label>
+  <input type="text" id="url" placeholder="wss://your-ngrok-host/ws" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <div class="buttons">
+    <button class="go" id="connect">Connect</button>
+    <button id="disconnect">Disconnect</button>
+  </div>
+  <div class="checks">
+    <label><input type="checkbox" id="phoneVoice" checked> Play the voice on this phone</label>
+    <label><input type="checkbox" id="mutePC"> Mute the computer</label>
+  </div>
+</div>
+
+<div class="ropes" aria-hidden="true"></div>
+
+<div class="verdict" id="verdict" role="status" aria-live="assertive"><span>Waiting for the first punch</span></div>
+
+<section class="cam" id="cam" hidden aria-label="Camera">
+  <canvas id="camc"></canvas>
+  <video id="camv" playsinline muted hidden></video>
+  <div class="camrow">
+    <button class="rec" id="recBtn">Start recording</button>
+    <button id="flipBtn">Switch camera</button>
+    <span>The saved video shows each call and the scorer clock.</span>
+  </div>
+</section>
+
+<section class="tally" aria-label="Score">
+  <div class="hits"><small>Clean hits</small><span id="hits">0</span></div>
+  <div class="rate"><b id="rate">–</b><span>hit rate</span></div>
+  <div class="minor">
+    <div><b id="blocked">0</b>blocked</div>
+    <div><b id="misses">0</b>missed</div>
+    <div><b id="permin">0</b>in the last minute</div>
+  </div>
+</section>
+
+<div class="signals" aria-label="Live sensor signals">
+  <canvas id="wave" aria-hidden="true"></canvas>
+  <div class="lanes" aria-hidden="true">
+    <span><i style="background:var(--rope)"></i>Glove impact</span>
+    <span><i style="background:var(--corner)"></i>Helmet impact</span>
+    <span><i style="background:var(--motion)"></i>Arm motion</span>
+  </div>
+</div>
+
+<div class="ropes" aria-hidden="true"></div>
+
+<div class="log" id="log" aria-live="polite">
+  <div class="msg sys">Open Setup, paste the bridge address, then tap Connect.</div>
+</div>
+
+<div class="ask">
+  <button class="mic" id="mic" disabled>Hold to ask the coach</button>
+  <div class="type">
+    <input id="txt" placeholder="Or type a question" autocomplete="off" aria-label="Question for the coach">
+    <button id="send">Ask</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let ws=null, waveG=[], waveH=[], waveA=[], speaking=false, rec=null, recording=false;
+const MIC_IDLE='Hold to ask the coach';
+
+/* ---------- audio: Fish voice comes from the computer; Web Audio needs one tap to unlock ---------- */
+let actx=null, clips={}, callSrc=null, coachSrc=null;
+function unlockAudio(){
+  try{
+    if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state==='suspended') actx.resume();
+  }catch(e){}
+}
+function b64ToBuf(b64){
+  const bin=atob(b64), u=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i);
+  return u.buffer;
+}
+function decode(b64){
+  return new Promise((ok,bad)=>{
+    if(!actx) return bad('no audio context');
+    actx.decodeAudioData(b64ToBuf(b64), ok, bad);
+  });
+}
+function playBuf(buf, which){
+  if(!actx||!buf) return null;
+  const s=actx.createBufferSource(); s.buffer=buf; s.connect(actx.destination);
+  if(which==='call'){ try{ callSrc&&callSrc.stop(); }catch(e){} callSrc=s; }
+  else{ try{ coachSrc&&coachSrc.stop(); }catch(e){} coachSrc=s; }
+  s.start(); return s;
+}
+async function loadPack(m){
+  clips={};
+  for(const k of Object.keys(m.clips||{})){
+    try{ clips[k]=await decode(m.clips[k]); }catch(e){}
+  }
+  say('sys', Object.keys(clips).length ? 'Voice ready.' : 'No voice clips from the computer, so the phone voice will read the calls.');
+}
+
+/* ---------- verdict strip ---------- */
+const CALL_WORD={HIT:'Hit',BLOCKED:'Blocked',MISS:'Miss'};
+let verdictTimer=null;
+function onCall(kind){
+  const v=$('verdict');
+  v.className='verdict call '+kind.toLowerCase();
+  v.innerHTML='<span>'+CALL_WORD[kind]+'</span>';
+  void v.offsetWidth; v.classList.add('slam');
+  clearTimeout(verdictTimer);
+  verdictTimer=setTimeout(()=>{ v.className='verdict'; v.innerHTML='<span>Last call: '+CALL_WORD[kind]+'</span>'; },1600);
+  if(kind==='HIT' && navigator.vibrate) navigator.vibrate(25);
+  if(!$('phoneVoice').checked) return;
+  if(clips[kind]) playBuf(clips[kind],'call');
+  else speak(CALL_WORD[kind]);
+}
+
+/* ---------- persisted address ---------- */
+// default bridge: this account's fixed ngrok domain. A saved address (from the last Connect) takes priority.
+const DEFAULT_WS='';   // optional: put your own wss://<ngrok-host>/ws here
+$('url').value=DEFAULT_WS;
+try{ const s=localStorage.getItem('jabjudge_ws'); if(s) $('url').value=s; }catch(e){}
+
+/* ---------- conversation ---------- */
+function say(cls, text){
+  const d=document.createElement('div');
+  d.className='msg '+cls; d.textContent=text;
+  $('log').appendChild(d); $('log').scrollTop=$('log').scrollHeight;
+  while($('log').children.length>60) $('log').removeChild($('log').firstChild);
+}
+function speak(text){
+  if(!$('phoneVoice').checked || !window.speechSynthesis) return;
+  if(recording) stopRec(false);
+  speaking=true;
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text);
+  u.rate=0.95; u.lang='en-US';
+  u.onend=u.onerror=()=>{ speaking=false; };
+  speechSynthesis.speak(u);
+}
+async function playCoach(b64,text){
+  if(!$('phoneVoice').checked) return;
+  if(recording) stopRec(false);                       // mic off while the coach talks
+  if(b64){
+    try{
+      const buf=await decode(b64);
+      speaking=true;
+      const s=playBuf(buf,'coach');
+      if(s) s.onended=()=>{ speaking=false; };
+      return;
+    }catch(e){}
+  }
+  speak(text);
+}
+
+/* ---------- websocket ---------- */
+function setLive(on,label){ $('live').classList.toggle('on',on); $('stat').textContent=label; }
+function connect(){
+  const url=$('url').value.trim();
+  if(!url){ say('sys','Paste the bridge address first, it starts with wss://'); return; }
+  try{ localStorage.setItem('jabjudge_ws',url); }catch(e){}
+  unlockAudio();
+  if(ws) ws.close();
+  setLive(false,'Connecting');
+  ws=new WebSocket(url);
+  ws.onopen=()=>{
+    setLive(true,'Live');
+    $('mic').disabled=false; togglePanel(false);
+    say('sys','Connected. Start sparring.');
+    sendMute();
+  };
+  ws.onclose=()=>{ setLive(false,'Offline'); $('mic').disabled=true; say('sys','Disconnected. Check that the computer and ngrok are still running.'); };
+  ws.onerror=()=>{ setLive(false,'Can’t reach the computer'); };
+  ws.onmessage=e=>{
+    const m=JSON.parse(e.data);
+    if(m.type==='state') paint(m);
+    else if(m.type==='voice_pack') loadPack(m);
+    else if(m.type==='call'){ onCall(m.kind); logCall(m.kind,m.t); }
+    else if(m.type==='ai_reply'){ say('coach',m.text); if(!m.audio_pending) playCoach(null,m.text); }
+    else if(m.type==='ai_audio') playCoach(m.audio,m.text);
+    else if(m.type==='coach_pc') say('sys','Asked at the computer: '+m.text);
+  };
+}
+function sendMute(){
+  if(ws && ws.readyState===1) ws.send(JSON.stringify({type:'mute_pc', value:$('mutePC').checked}));
+}
+
+/* ---------- tally ---------- */
+let last={hits:0,blocked:0,misses:0,rate:'–'}, rxOffset=null;
+function noteRx(t){                                   // scorer clock (s) vs phone clock; keep the lowest-latency sample
+  if(t==null) return;
+  const o=t*1000-performance.now();
+  rxOffset = rxOffset==null ? o : Math.max(o, rxOffset-0.02);
+}
+function rxNow(){ return rxOffset==null ? null : (performance.now()+rxOffset)/1000; }
+function paint(s){
+  noteRx(s.t_rx);
+  last={hits:s.hits??0,blocked:s.blocked??0,misses:s.misses??0,rate:(s.hit_rate&&s.hit_rate!=='n/a')?s.hit_rate:'–'};
+  $('hits').textContent=s.hits??0;
+  $('blocked').textContent=s.blocked??0;
+  $('misses').textContent=s.misses??0;
+  $('rate').textContent=s.hit_rate&&s.hit_rate!=='n/a'?s.hit_rate:'–';
+  $('permin').textContent=s.per_min??0;
+  waveG=s.glove||[]; waveH=s.helmet||[]; waveA=s.acc||[];
+  draw();
+}
+const cv=$('wave'), ctx=cv.getContext('2d');
+function fit(){
+  const r=cv.getBoundingClientRect(), dpr=devicePixelRatio||1;
+  cv.width=r.width*dpr; cv.height=r.height*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+addEventListener('resize',()=>{ fit(); draw(); });
+// each sensor gets its own lane; piezo lanes span the 0–3.3 V input, the motion lane spans ±3.5 g
+function lane(w,color,idx,lo,hi){
+  const r=cv.getBoundingClientRect(), h=r.height/3, top=idx*h, pad=4;
+  ctx.strokeStyle='rgba(169,184,221,.18)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,top+h); ctx.lineTo(r.width,top+h); ctx.stroke();
+  if(w.length<2) return;
+  const x=i=>i/(w.length-1)*r.width;
+  const y=v=>top+pad+(h-2*pad)*(1-(Math.min(Math.max(v,lo),hi)-lo)/(hi-lo));
+  ctx.beginPath(); ctx.moveTo(x(0),y(w[0]));
+  for(let i=1;i<w.length;i++) ctx.lineTo(x(i),y(w[i]));
+  ctx.lineWidth=1.6; ctx.strokeStyle=color; ctx.stroke();
+}
+function draw(){
+  const r=cv.getBoundingClientRect();
+  ctx.clearRect(0,0,r.width,r.height);
+  lane(waveG,'#F4F6FA',0,-0.1,3.4);
+  lane(waveH,'#E0313B',1,-0.1,3.4);
+  lane(waveA,'#FFC857',2,-3.5,3.5);
+}
+
+/* ---------- speech in ---------- */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(SR){
+  rec=new SR(); rec.lang='en-US'; rec.continuous=false; rec.interimResults=false;
+  rec.onresult=e=>{ const t=e.results[0][0].transcript.trim(); if(t) ask(t); };
+  rec.onerror=e=>{ if(e.error!=='aborted') say('sys','The microphone stopped ('+e.error+'). Try again or type the question.'); };
+  rec.onend=()=>{ recording=false; $('mic').classList.remove('rec'); $('mic').textContent=MIC_IDLE; };
+}else{
+  $('mic').textContent='Voice input isn’t available here, type below';
+}
+function startRec(){
+  unlockAudio();
+  if(!rec||recording) return;
+  if(speaking){ speechSynthesis.cancel(); try{ coachSrc&&coachSrc.stop(); }catch(e){} speaking=false; }
+  try{ rec.start(); recording=true; $('mic').classList.add('rec'); $('mic').textContent='Listening, let go to send'; }catch(e){}
+}
+function stopRec(process){
+  if(!rec||!recording) return;
+  recording=false;
+  if(process) rec.stop(); else rec.abort();
+  $('mic').classList.remove('rec'); $('mic').textContent=MIC_IDLE;
+}
+function ask(text){
+  say('you',text);
+  if(ws && ws.readyState===1) ws.send(JSON.stringify({type:'speech',text}));
+  else say('sys','Not connected yet. Open Setup and tap Connect.');
+}
+
+/* ---------- camera + recording (each call and the scorer clock are burned into the video) ---------- */
+let camStream=null, camLoop=null, facing='environment', recorder=null, chunks=[], recStartRx=null,
+    recStartPerf=0, recEvents=[], recName='', wakeLock=null, overlayCall={kind:null,until:0};
+const cc=$('camc'), cx=cc.getContext('2d'), cv2=$('camv');
+const CALL_COLOR={HIT:'#E0313B',BLOCKED:'#C7D0E4',MISS:'#1B3C8C'};
+async function startCamera(){
+  stopCamera();
+  try{
+    camStream=await navigator.mediaDevices.getUserMedia({audio:false,
+      video:{facingMode:facing,width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}}});
+  }catch(e){ say('sys','Camera blocked. Allow camera access for this site in the browser settings.'); setCam(false); return; }
+  cv2.srcObject=camStream; await cv2.play().catch(()=>{});
+  const fitCam=()=>{ cc.width=cv2.videoWidth||1280; cc.height=cv2.videoHeight||720; cc.style.aspectRatio=cc.width+'/'+cc.height; };
+  if(cv2.readyState>=1) fitCam(); else cv2.onloadedmetadata=fitCam;
+  const tick=()=>{ drawFrame(); camLoop=requestAnimationFrame(tick); };
+  tick();
+}
+function stopCamera(){
+  if(camLoop) cancelAnimationFrame(camLoop); camLoop=null;
+  if(camStream) camStream.getTracks().forEach(t=>t.stop()); camStream=null;
+}
+function drawFrame(){
+  const W=cc.width, H=cc.height; if(!W) return;
+  if(cv2.readyState>=2) cx.drawImage(cv2,0,0,W,H);
+  const u=Math.min(W,H)/720;                         // scale the overlay with the video
+  cx.fillStyle='rgba(19,44,106,.78)'; cx.fillRect(16*u,16*u,470*u,92*u);
+  cx.fillStyle='#F4F6FA'; cx.font=`900 ${34*u}px 'Big Shoulders Display',Impact,sans-serif`;
+  cx.fillText('Jab Judge',30*u,54*u);
+  cx.font=`600 ${24*u}px 'Public Sans',system-ui,sans-serif`;
+  cx.fillText(`Hits ${last.hits}   Blocked ${last.blocked}   Missed ${last.misses}   ${last.rate}`,30*u,92*u);
+  const rx=rxNow(), tl=rx==null?'Scorer clock: not connected':`Scorer clock ${rx.toFixed(2)} s`;
+  cx.font=`500 ${22*u}px 'Public Sans',system-ui,sans-serif`;
+  const tw=cx.measureText(tl).width+28*u;
+  cx.fillStyle='rgba(19,44,106,.78)'; cx.fillRect(W-tw-16*u,16*u,tw,recorder?84*u:44*u);
+  cx.fillStyle='#F4F6FA'; cx.fillText(tl,W-tw-2*u,46*u);
+  if(recorder){
+    const sec=(performance.now()-recStartPerf)/1000;
+    cx.fillStyle='#E0313B'; cx.beginPath(); cx.arc(W-tw+8*u,79*u,8*u,0,7); cx.fill();
+    cx.fillStyle='#F4F6FA'; cx.fillText(`Recording ${fmt(sec)}`,W-tw+24*u,87*u);
+  }
+  if(overlayCall.kind && performance.now()<overlayCall.until){
+    const k=overlayCall.kind, word=CALL_WORD[k];
+    cx.font=`900 ${120*u}px 'Big Shoulders Display',Impact,sans-serif`;
+    const ww=cx.measureText(word).width+80*u, x=(W-ww)/2, y=H-190*u;
+    cx.fillStyle=CALL_COLOR[k]; cx.fillRect(x,y,ww,150*u);
+    if(k==='MISS'){ cx.strokeStyle='#F4F6FA'; cx.lineWidth=6*u; cx.strokeRect(x,y,ww,150*u); }
+    cx.fillStyle=k==='BLOCKED'?'#1B3C8C':'#FFFFFF'; cx.fillText(word,x+40*u,y+125*u);
+  }
+}
+function fmt(sec){ const m=Math.floor(sec/60), s2=Math.floor(sec%60); return `${m}:${String(s2).padStart(2,'0')}`; }
+function logCall(kind,t){
+  overlayCall={kind,until:performance.now()+1200};
+  if(recorder){
+    const rx=(t??rxNow());
+    recEvents.push({kind, scorer_t:rx,
+      video_t: rx!=null&&recStartRx!=null ? +(rx-recStartRx).toFixed(3) : +((performance.now()-recStartPerf)/1000).toFixed(3)});
+  }
+}
+function pickType(){
+  for(const t of ['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'])
+    if(window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
+  return '';
+}
+function stamp(){ const d=new Date(), p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
+function download(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},4000); }
+async function startRecording(){
+  if(!camStream) return;
+  if(!window.MediaRecorder||!cc.captureStream){ say('sys','This browser can’t record video. Use Chrome on Android.'); return; }
+  const type=pickType();
+  chunks=[]; recEvents=[];
+  recorder=new MediaRecorder(cc.captureStream(30), type?{mimeType:type,videoBitsPerSecond:4e6}:undefined);
+  recorder.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+  recorder.onstop=saveRecording;
+  recName=`jabjudge_${stamp()}`;
+  recStartPerf=performance.now(); recStartRx=rxNow();
+  recorder.start(1000);
+  $('recBtn').textContent='Stop and save'; $('recBtn').classList.add('on');
+  if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'video',state:'start',rx_t:recStartRx,file:recName}));
+  try{ wakeLock=await navigator.wakeLock?.request('screen'); }catch(_){}
+}
+function stopRecording(){
+  if(!recorder) return;
+  const r=recorder; recorder=null; r.stop();
+  $('recBtn').textContent='Start recording'; $('recBtn').classList.remove('on');
+  if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'video',state:'stop',rx_t:rxNow(),file:recName}));
+  try{ wakeLock&&wakeLock.release(); }catch(_){} wakeLock=null;
+}
+function saveRecording(){
+  const type=chunks[0]?.type||'video/webm', ext=type.includes('mp4')?'mp4':'webm';
+  download(new Blob(chunks,{type}), `${recName}.${ext}`);
+  const meta={video:`${recName}.${ext}`, scorer_clock_at_video_start:recStartRx,
+    note:'video_t = seconds from the start of the video; scorer_t matches t_s in the computer CSV',
+    events:recEvents};
+  setTimeout(()=>download(new Blob([JSON.stringify(meta,null,2)],{type:'application/json'}), `${recName}_events.json`),800);
+  say('sys',`Saved ${recName}.${ext} and its list of ${recEvents.length} calls.`);
+}
+function setCam(on){
+  $('cam').hidden=!on; $('camBtn').setAttribute('aria-pressed',on);
+  if(on) startCamera(); else { stopRecording(); stopCamera(); }
+}
+$('camBtn').onclick=()=>setCam($('cam').hidden);
+$('recBtn').onclick=()=>{ if(recorder) stopRecording(); else startRecording(); };
+$('flipBtn').onclick=()=>{ if(recorder){ say('sys','Stop recording before switching cameras.'); return; }
+  facing=facing==='environment'?'user':'environment'; startCamera(); };
+
+/* ---------- wiring ---------- */
+function togglePanel(open){
+  const p=$('panel'), o=open??!p.classList.contains('open');
+  p.classList.toggle('open',o); $('gear').setAttribute('aria-expanded',o);
+}
+$('mic').addEventListener('pointerdown',e=>{e.preventDefault();try{$('mic').setPointerCapture(e.pointerId);}catch(_){}startRec();});
+$('mic').addEventListener('contextmenu',e=>e.preventDefault());       // stop Android's long-press text selection
+$('mic').addEventListener('pointerup',e=>{e.preventDefault();stopRec(true);});
+$('mic').addEventListener('pointercancel',()=>stopRec(false));
+$('mic').addEventListener('pointerleave',()=>{ if(recording) stopRec(true); });
+$('send').onclick=()=>{ const v=$('txt').value.trim(); if(v){ unlockAudio(); ask(v); $('txt').value=''; } };
+$('txt').addEventListener('keydown',e=>{ if(e.key==='Enter') $('send').click(); });
+$('gear').onclick=()=>togglePanel();
+$('connect').onclick=connect;
+$('disconnect').onclick=()=>{ if(ws) ws.close(); };
+$('mutePC').onchange=sendMute;
+
+fit(); draw();
+if(!$('url').value) togglePanel(true);
+</script>
+</body>
+</html>
